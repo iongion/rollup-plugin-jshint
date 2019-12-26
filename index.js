@@ -7,11 +7,13 @@ var merge = require("merge-deep");
 var PluginUtils = require("rollup-pluginutils");
 var JSHINT = require("jshint");
 var CLI = require("jshint/src/cli");
+// var minimatch = require("minimatch");
+// var shjs = require("shelljs");
 var reporter = require("jshint-stylish");
 // locals
 var PluginName = "jshint";
 var defaultOptions = {
-  useJshintrc: false,
+  useJshintrc: true,
   include: null,
   exclude: /node_modules/,
   throwOnWarning: false,
@@ -26,29 +28,62 @@ function normalizePath(id) {
     .split(path.sep)
     .join("/");
 }
+/**
+ * Checks whether we should ignore a file or not.
+ *
+ * @param {string} fp       a path to a file
+ * @param {array}  patterns a list of patterns for files to ignore
+ *
+ * @return {boolean} 'true' if file should be ignored, 'false' otherwise.
+ */
+function isIgnored(fp, patterns) {
+  return patterns.some(function(ip) {
+    if (minimatch(path.resolve(fp), ip, { nocase: true, dot: true })) {
+      return true;
+    }
+    if (path.resolve(fp) === ip) {
+      return true;
+    }
+    if (
+      shjs.test("-d", fp) &&
+      ip.match(/^[^\/\\]*[\/\\]?$/) &&
+      fp.match(new RegExp("^" + ip + ".*"))
+    ) {
+      return true;
+    }
+  });
+}
 // module
 function jshint(userOptions) {
-  var options = {};
-  if (typeof userOptions === "string") {
-    var pathToJshintrc = path.resolve(process.cwd(), options);
-    if (fs.existsSync(pathToJshintrc)) {
-      options = merge({}, defaultOptions, require(pathToJshintrc));
-    } else {
-      throw Error("No file in expected path: " + pathToJshintrc);
-    }
-  } else {
-    options = merge({}, defaultOptions, userOptions || {});
-  }
+  var options = merge({}, defaultOptions, userOptions || {});
   var filter = PluginUtils.createFilter(
     options.include,
     options.exclude || /node_modules/
   );
+  var jshintrcOptions = {};
+  if (options.useJshintrc) {
+    var pathToJshintrc = path.join(process.cwd(), ".jshintrc");
+    if (fs.existsSync(pathToJshintrc)) {
+      jshintrcOptions = merge(
+        {},
+        {
+          include: options.include,
+          exclude: options.exclude
+        },
+        CLI.loadConfig(pathToJshintrc)
+      );
+    } else {
+      throw Error("No file in expected path: " + pathToJshintrc);
+    }
+  }
   // console.debug('Plugin options are', options);
   return {
     name: PluginName,
     transform: function(code, id) {
       var file = normalizePath(id);
-      if (!filter(id)) {
+      // var ignored = isIgnored(file, jshintrcOptions.exclude);
+      var filtered = !filter(id);
+      if (filtered) {
         return null;
       }
       var success = false;
@@ -58,6 +93,7 @@ function jshint(userOptions) {
         implieds: [],
         globals: []
       };
+      console.debug("Verify", jshintrcOptions, id);
       if (fs.existsSync(file)) {
         var jshintArgs = [];
         jshintArgs.push(file);
@@ -66,11 +102,12 @@ function jshint(userOptions) {
           {
             args: jshintArgs,
             reporter: options.reporter.reporter
-          }
+          },
+          jshintrcOptions
         );
         success = CLI.run(jshintOpts);
       } else {
-        var withoutIssues = JSHINT.JSHINT(code);
+        var withoutIssues = JSHINT.JSHINT(code, jshintrcOptions);
         if (!withoutIssues) {
           report = JSHINT.JSHINT.data();
         }
