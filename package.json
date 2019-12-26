@@ -33,7 +33,6 @@
     "husky": "^2.3.0",
     "jest": "^24.9.0",
     "lint-staged": "^8.1.7",
-    "merge-deep": "^3.0.2",
     "prettier": "^1.17.1",
     "rollup": "^1.12.3",
     "rollup-plugin-node-resolve": "^5.0.0"
@@ -41,6 +40,7 @@
   "dependencies": {
     "jshint": "^2.9.7",
     "jshint-stylish": "^2.2.1",
+    "merge-deep": "^3.0.2",
     "rollup-pluginutils": "^2.7.1"
   }
 }
